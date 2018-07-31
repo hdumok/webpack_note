@@ -1,2 +1,1 @@
-# webpack_note
-webpack学习
+# <<深入浅出webpack>>笔记
