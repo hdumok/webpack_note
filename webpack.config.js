@@ -1,21 +1,10 @@
 'use strict';
 
 const path = require('path');
-/*
-1、CommentJS规范流行与Node.js采用, 缺点是无法直接在浏览器环境下使用，必须转换成ES5
-2、AMD没有原生环境支持, 必须导入第三方库才能使用
-3、ES6模块处理方案是终极解决方式, 但目前也必须转换成ES5才能执行
-4、Grunt集成度不高，需要些大量配置才能使用，Gulp加强版, 引入了流，但是还是集成度不高，需要写大量配置
-5、Webpack专注处理模块化项目, 开箱即用，但是缺点也是只能处理采用模块化开发的项目
-6、npm script里的任务会优先使用本项目下的webpack
-7、webpack内置了对ES6、CommonJs、AMD的支持
-8、webpack-dev-server不会理会webpack.config.js里的output.path值, 会将构建出的文件放在内存中，相应的html里的文件目录要去掉./dist/前缀，直接bundle.js
-9、webpack 默认不启动监听模式，需要 webpack --watch 监听, webpack-dev-server 默认开启监听模式
-10、监听模式无法监听 index.html的改动，只监听 entry 本身和 entry依赖链里的文件
-11、chunk代码块，一个chunk由多个模块组合而生，用于代码的合并与分割，一个entry及其所有依赖的module被分到一个组也就是一个chunk,最后webpack会将所有的chunk转换成文件输出
-*/
 
 const ExtractTextPlugin = require('extract-text-webpack-plugin')
+const DefinePlugin = require('')
+const UglifyJsPlugin = require('')
 
 module.exports = {
 
@@ -36,10 +25,10 @@ module.exports = {
   // },
   output: {
     //path和publichash都支持字符串模 [hash], 代表一次编译操作的hash值
-    path: path.resolve(__dirname, './dist'),
+    path: path.resolve(__dirname, './dist/[hash]/'),
     //发布到线上资源的url前缀，默认''，使用相对index.html路径
     //这时候xxx.html里的资源引用 src=http://cdn.xxx.com/assets/abc.js
-    publicPath: 'http://cdn.xxx.com/assets/',
+    publicPath: 'http://cdn.xxx.com/assets/[hash]/',
 
     filename: 'bundle.js',
     //filename: '[name]_[hash]_[chunkhash].js',
@@ -61,8 +50,8 @@ module.exports = {
         //   /\.scss$/
         // ]
         //下面两个个参数 也支持数组
-        include: path.resolve(__dirname, 'src'),
-        exclude: path.resolve(__dirname, 'node_modules'),
+        include: path.resolve(__dirname, 'src'), //只从src下命中文件转换
+        exclude: path.resolve(__dirname, 'node_modules'), //排除node_modules下的文件检查
 
         //执行顺序由右到左，querystring方式传入参数
         use: [
@@ -76,6 +65,9 @@ module.exports = {
           }
           //也可以 load = require('style-loader!css-loader?minimize!./main.css')  load.then()
         ],
+        //use: ExtractTextPlugin.extract({
+        //  use: ['css-loader?minimize']
+        //}),
         loaders: ExtractTextPlugin.extract({
           use: ['css-loader']
         }),
@@ -93,21 +85,43 @@ module.exports = {
   plugins: [
     //从.js文件中提取出来的.css文件的名称
     new ExtractTextPlugin({
-      filename: '[name]_[contenthash:8].css' //contenthash根据文件内容算出的hash, 不用chunkhash是因为Plugin直接拿到了源文件，而不是中间thunk
+      filename: '[name]_[contenthash:8].css' //contenthash根据文件内容算出的hash, 不用chunkhash是因为Plugin直接拿到了源文件，而不是编译中间thunk
+    }),
+    new DefinePlugin({
+      'process.env': {
+        NODE_ENV: JSON.stringify('production') //取出源码中只有开发时采用的部分
+      }
+    }),
+    new UglifyJsPlugin({
+      //最紧凑的输出, 紧凑就是丑, 去掉换行什么的
+      beautify: false,
+      //删除所有注释
+      comments: false,
+      //压缩参数
+      compress: {
+        //删除没有用到的代码时不输出警告
+        warnings: false,
+        //删除所有console语句
+        drop_console: true,
+        //内嵌已定义但是只用到一次的变量
+        collapse_vars: true,
+        //提取出现多次但是没有定义成变量的静态值
+        reduce_vars: true
+      }
     })
   ],
   //配置webpack如果寻找所有依赖的模块对应的文件
-  resolve: {
-    alias: {
+  resolve: {//对模块导入功能，即 require 函数的强化
+    alias: { //将原导入路径 映射 成 新导入路径，进行导入操作
       components: './src/components/', //替换路径 import Button from 'components/button' 为 import Button from './srccomponents/button'
       'react$': '/path/react.js', //import 'react'
     },
     extensions: ['.js', '.json'], //当导入语句没带后缀时，自动带上后缀访问文件是否存在
     //指明入口文件位置的字段，根据这个决定优先采用哪部分代码，因为一些第三方模块会在不同环境提供不同的代码入口
     mainFields: ['browser', 'main'],
-    modules: [ //配置Webpack去哪些目录下寻找第三方模块，默认只会沿着 node_moudles目录寻找
+    modules: [ //配置Webpack去哪些目录下寻找第三方模块
       './src/components',
-      'node_modules'
+      'node_modules' // 默认只会沿着 node_moudles目录寻找
     ],
     enforceExtension: false, //强制所有导入语句都必须带后缀，也没啥用, 导入第三方模块一般都不带后缀
     enforceModuleExtension: false, //如果上一参数为true  这个参数将第三方模块排除在外
@@ -124,7 +138,7 @@ module.exports = {
     //     {from: '/user', to: '/user.html'}
     //   ]
     // }
-    contentBase: __dirname, //服务器文件的根目录, 默认当前执行目录，用于暴露本地文件(如果有引用的话)，打包生成的文件都在内存中
+    contentBase: path.resolve(__dirname, 'public'), //服务器文件的根目录, 默认当前执行目录，用于暴露本地文件(如果有引用的话)，打包生成的文件都在内存中
     headers: {
       //响应头
     },
@@ -144,6 +158,7 @@ module.exports = {
 
   devtool: 'source-map', //默认不生成 Source Map
   watch: false, // 监听模式开关
+  //判断文件编号是通过不停的询问文件系统指定文件有没有变化实现的
   watchOptions: {
     ignored: '/node_modules/',
     aggregateTimeout: 300, //监听到变化后等300ms执行动作
@@ -152,8 +167,9 @@ module.exports = {
 
   //一般一些公共外部模块会注入一些全局变量，如jQuery, 在代码里再次引用，打包会造成出现两次
   //最好是Chunk里不包含jQuery库的内容
-  externals: { //告诉webpack在Javascript里已经内置了哪些全局变量，不用再次打包到thunk，而是直接使用
-    jquery: 'jQuery'
+  externals: {
+    //告诉webpack在Javascript里已经内置了哪些全局变量，不用再次打包到thunk，而是直接使用
+    jquery: 'jQuery' // import jquery from 'jQuery' 直接替换，不打包
   },
 
   resolveLoader: {
